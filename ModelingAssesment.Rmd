@@ -1,0 +1,402 @@
+---
+title: "Modeling Assesment"
+always_allow_html: yes  
+output:
+  github_document:
+    toc: true
+    toc_depth: 5
+vignette: |
+  %\VignetteIndexEntry{TITAN Tutorial} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+
+# Tickets Listed 
+
+## Load in data and Visualizing
+
+
+```{r Read In Data}
+library(tidyverse)
+library(xgboost)
+library(Matrix)
+library(MLmetrics)
+library(Metrics)
+
+## load in the data
+sales <- read.csv("~/Downloads/assessment_data.tsv", sep = "\t")
+
+## make sure the date in the right format 
+sales$listing_date <- as.Date(sales$listing_date)
+sales$event_date <- as.Date(sales$event_datetime)
+
+# Getting an idea for variable types 
+colnames(sales)
+# [1] "event_id"              "listing_date"          "event_listing_date_id" "taxonomy"             
+# [5] "event_title"           "event_datetime"        "tickets_listed"        "mean_eventt_price"   
+# [9] "performer_1"           "performer_2"           "performer_3"           "performer_4"          
+# [13] "venue_name"     
+
+## Take a look at the data
+ggplot(sales, aes(x =listing_date,  y=tickets_listed, color = taxonomy)) +
+  geom_point() +
+  facet_wrap(~taxonomy)
+```
+
+
+## Feature Engineering
+
+First thing I noticed when looking at the data is that the different venues/taxonomy have very different scales when it comes to the ouput variables. For this reason, log transforming the values makes sense as to be able to better assess error. 
+
+``` {r logTransform}
+## log transform the values 
+sales$mean_listing_price <- log1p(sales$mean_listing_price)
+sales$tickets_listed <- log1p(sales$tickets_listed)
+```
+
+Next, given the temporal nature of the listings and day of event, convert the date to time based features
+``` {r timeBased}
+##  convert to time-based features
+sales$listing_month <- as.numeric(substr(sales$listing_date, 6, 7))
+sales$listing_day <- as.numeric(as.factor(weekdays(as.Date(sales$listing_date)))) #day of week
+sales$listing_dayDate <- as.numeric(substr(sales$listing_date, 9, 10))
+sales$listing_year  <- substr(sales$listing_date, 1, 4)
+sales$event_month <- as.numeric(substr(sales$event_date, 6, 7))
+sales$event_day <- as.numeric(as.factor(weekdays(as.Date(sales$event_date)))) #day of week
+sales$event_dayDate <- as.numeric(substr(sales$event_date, 9, 10))
+sales$event_year  <- substr(sales$event_date, 1, 4)
+```
+
+Looking above some of the above clusters under taxonomy, some were NA but clearly orchestral.
+
+``` {r fixtaxonomy}
+## fix 
+sales$taxonomy[is.na(sales$taxonomy)] <- "Classical Orchestral"
+```
+
+
+Finally, I noticed when looking at some event IDs that tickets_listed seems to be correlated with how long it has been since the event was first listed so exploring that and adding a variable for days since listed.
+``` {r DaysSinceListed, fig.width=3.5, fig.height=3.5}
+
+## mlb
+randombaseballgame <- sales %>% filter(event_id == "3594124")
+
+ggplot(randombaseballgame, aes(x=listing_date, y = tickets_listed)) +
+  geom_point() +
+  ggtitle(randombaseballgame$event_title)
+
+## Symphony
+randomOrch <- sales %>% filter(event_id == "3799889")
+ggplot(randomOrch, aes(x=listing_date, y = tickets_listed)) +
+  geom_point() +
+  ggtitle(randomOrch$event_title)
+
+## minor league
+RandomMinor <- sales %>% filter(event_id == "3750580")
+
+ggplot(RandomMinor, aes(x=listing_date, y = tickets_listed)) +
+  geom_point() +
+  ggtitle(RandomMinor$event_title)
+
+## ADD variable for days since listing
+sales <- sales %>% group_by(event_id) %>% mutate(daysSinceListing = row_number() -1 )
+```
+
+
+Next, I wanted to see if there were any patterns between some of the features and values
+``` {r plot,  fig.width=3.5, fig.height=3.5}
+ggplot(sales, aes(x =factor(event_day),  y=tickets_listed)) +
+  geom_boxplot() +
+  facet_wrap(~taxonomy) +
+  theme(legend.position = "none")
+ggplot(sales, aes(x =factor(event_month),  y=tickets_listed)) +
+  geom_boxplot() +
+  facet_wrap(~taxonomy) +
+  theme(legend.position = "none")
+ggplot(sales, aes(x =factor(taxonomy),  y=tickets_listed)) +
+  geom_boxplot() +
+  theme(legend.position = "none")
+```
+
+## Model Building with xgrboost
+
+``` {r model}
+
+## Test this type of model leaving out some of the known data to validate on
+train <- sales %>% filter(listing_date < "2017-07-20")
+
+## leave some behind to validate on
+validation <- sales %>% filter(listing_date >= "2017-07-20", listing_date < "2017-08-01")
+test <-  sales %>% filter(listing_date >= "2017-08-01")
+label <- train$tickets_listed
+
+## Great input train matrix
+trainMatrix <- sparse.model.matrix(~ event_month + event_day + taxonomy + daysSinceListing + event_id,
+                                   data = train,
+                                   contrasts.arg =  c("event_month",
+                                                      "event_day",
+                                                      "event_year",
+                                                      "taxonomy",
+                                                      "daysSinceListing" ,
+                                                      "event_id"),
+                                   sparse = FALSE,
+                                   sapsci =FALSE)
+
+#Create input for xgboost
+trainDMatrix <- xgb.DMatrix(data = trainMatrix, label = label)
+
+params <- list(booster = "gbtree"
+               , objective = "reg:linear"
+               , eta=0.4
+               , gamma=0
+)
+
+#Cross-validation
+xgb.tab <- xgb.cv(data = trainDMatrix
+                  , param = params
+                  , maximize = FALSE, evaluation = "rmse", nrounds = 100
+                  , nthreads = 10, nfold = 2, early_stopping_round = 10)
+
+#Number of rounds choosen above
+num_iterations = xgb.tab$best_iteration
+
+
+## Create model
+model <- xgb.train(data = trainDMatrix
+                   , param = params
+                   , maximize = FALSE, evaluation = 'rmse', nrounds = num_iterations)
+
+## Plot feature Importance
+importance <- xgb.importance(feature_names = colnames(trainMatrix), model = model)
+xgb.ggplot.importance(importance_matrix = importance)
+
+## Create input validationing matrix
+validationMatrix <- sparse.model.matrix(~ event_month + event_day  + taxonomy + daysSinceListing + event_id,
+                                  data = validation,
+                                  contrasts.arg =  c("event_month",
+                                                     "event_day",
+                                                     "event_year",
+                                                     "taxonomy",
+                                                     "daysSinceListing",
+                                                     "event_id"),
+                                   sparse = FALSE,
+                                   sci = FALSE)
+````
+
+
+## Forcast Future Values
+
+Next, we need to use the model above to access the data 
+``` {r forcastFutureValues}
+## Forcast future values for the validation
+pred <- predict(model, validationMatrix)
+validation$tickets_listed_pred <- pred
+
+## Check the accuracy of the validation data
+ML <- validation %>% select(tickets_listed, tickets_listed_pred, taxonomy)
+ggplot(ML, aes(x=tickets_listed, y = tickets_listed_pred, color = taxonomy))+
+  geom_point(alpha = 0.4)
+
+## Access the validation set
+rmse(ML$tickets_listed, ML$tickets_listed_pred)
+R2_Score(ML$tickets_listed, ML$tickets_listed_pred)
+
+
+## Convert back to readable form
+ML$tickets_listed <- round(expm1(ML$tickets_listed))
+ML$tickets_listed_pred <- round(expm1(ML$tickets_listed_pred))
+head(ML, 20)
+```
+
+## Predict the testing data for assessment
+
+``` {r predict,}
+## Create input validationing matrix
+testMatrix <- sparse.model.matrix(~ event_month + event_day  + taxonomy + daysSinceListing + event_id,
+                                  data = test,
+                                  contrasts.arg =  c("event_month",
+                                                     "event_day",
+                                                     "event_year",
+                                                     "taxonomy",
+                                                     "daysSinceListing",
+                                                     "event_id"),
+                                   sparse = FALSE,
+                                   sci = FALSE)
+## Forcast future values for the validation
+pred <- predict(model, testMatrix)
+
+test$tickets_listed <- pred
+sales$tickets_listed[match(test$event_listing_date_id, sales$event_listing_date_id)] <- pred
+sales$tickets_listed <- round(expm1(sales$tickets_listed))
+
+write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = T)
+````
+
+
+
+
+
+
+
+
+
+
+# Mean Listing Price
+
+## Feature Engineering
+
+First I wanted to look how days since listing effects the price of tickets. In this case, it didn't seem to have as clear a correlation so I will not include the mean_listing_price in my model
+``` {r MLPDaysSinceListed, fig.width=3.5, fig.height=3.5}
+
+## mlb
+randombaseballgame <- sales %>% filter(event_id == "3594124")
+
+ggplot(randombaseballgame, aes(x=listing_date, y = mean_listing_price)) +
+  geom_point() +
+  ggtitle(randombaseballgame$event_title)
+
+## Symphony
+randomOrch <- sales %>% filter(event_id == "3799889")
+ggplot(randomOrch, aes(x=listing_date, y = mean_listing_price)) +
+  geom_point() +
+  ggtitle(randomOrch$event_title)
+
+## minor league
+RandomMinor <- sales %>% filter(event_id == "3750580")
+
+ggplot(RandomMinor, aes(x=listing_date, y = mean_listing_price)) +
+  geom_point() +
+  ggtitle(RandomMinor$event_title)
+
+```
+
+
+Next, I wanted to see if there were any patterns between some of the features and values
+``` {r MLPplot,  fig.width=3.5, fig.height=3.5}
+ggplot(sales, aes(x =factor(event_day),  y=mean_listing_price)) +
+  geom_boxplot() +
+  facet_wrap(~taxonomy) +
+  theme(legend.position = "none")
+ggplot(sales, aes(x =factor(event_month),  y=mean_listing_price)) +
+  geom_boxplot() +
+  facet_wrap(~taxonomy) +
+  theme(legend.position = "none")
+ggplot(sales, aes(x =factor(taxonomy),  y=mean_listing_price)) +
+  geom_boxplot() +
+  theme(legend.position = "none")
+```
+
+## Model Building with xgrboost
+
+``` {r MLPmodel}
+
+## Test this type of model leaving out some of the known data to validate on
+train <- sales %>% filter(listing_date < "2017-07-20")
+
+## leave some behind to validate on
+validation <- sales %>% filter(listing_date >= "2017-07-20", listing_date < "2017-08-01")
+test <-  sales %>% filter(listing_date >= "2017-08-01")
+label <- train$mean_listing_price
+
+## Great input train matrix
+trainMatrix <- sparse.model.matrix(~ event_month + event_day + taxonomy + event_id,
+                                   data = train,
+                                   contrasts.arg =  c("event_month",
+                                                      "event_day",
+                                                      "event_year",
+                                                      "taxonomy",
+                                                      "event_id"),
+                                   sparse = FALSE,
+                                   sapsci =FALSE)
+
+#Create input for xgboost
+trainDMatrix <- xgb.DMatrix(data = trainMatrix, label = label)
+
+params <- list(booster = "gbtree"
+               , objective = "reg:linear"
+               , eta=0.4
+               , gamma=0
+)
+
+#Cross-validation
+xgb.tab <- xgb.cv(data = trainDMatrix
+                  , param = params
+                  , maximize = FALSE, evaluation = "rmse", nrounds = 100
+                  , nthreads = 10, nfold = 2, early_stopping_round = 10)
+
+#Number of rounds choosen above
+num_iterations = xgb.tab$best_iteration
+
+
+## Create model
+model <- xgb.train(data = trainDMatrix
+                   , param = params
+                   , maximize = FALSE, evaluation = 'rmse', nrounds = num_iterations)
+
+## Plot feature Importance
+importance <- xgb.importance(feature_names = colnames(trainMatrix), model = model)
+xgb.ggplot.importance(importance_matrix = importance)
+
+## Create input validationing matrix
+validationMatrix <- sparse.model.matrix(~ event_month + event_day  + taxonomy + event_id,
+                                  data = validation,
+                                  contrasts.arg =  c("event_month",
+                                                     "event_day",
+                                                     "event_year",
+                                                     "taxonomy",
+                                                     "event_id"),
+                                   sparse = FALSE,
+                                   sci = FALSE)
+````
+
+
+## Forcast Future Values
+
+Next, we need to use the model above to access the data 
+``` {r MLPforcastFutureValues}
+## Forcast future values for the validation
+pred <- predict(model, validationMatrix)
+validation$mean_listing_price_pred <- pred
+
+## Check the accuracy of the validation data
+ML <- validation %>% select(mean_listing_price, mean_listing_price_pred, taxonomy)
+ggplot(ML, aes(x=mean_listing_price, y = mean_listing_price_pred, color = taxonomy))+
+  geom_point(alpha = 0.4)
+
+## Access the validation set
+rmse(ML$mean_listing_price, ML$mean_listing_price_pred)
+R2_Score(ML$mean_listing_price, ML$mean_listing_price_pred)
+
+
+## Convert back to readable form
+ML$mean_listing_price <- round(expm1(ML$mean_listing_price))
+ML$mean_listing_price_pred <- round(expm1(ML$mean_listing_price_pred))
+head(ML, 20)
+```
+
+## Predict the testing data for assessment
+
+``` {r MLPpredict,}
+## Create input validationing matrix
+testMatrix <- sparse.model.matrix(~ event_month + event_day  + taxonomy  + event_id,
+                                  data = test,
+                                  contrasts.arg =  c("event_month",
+                                                     "event_day",
+                                                     "event_year",
+                                                     "taxonomy",
+                                                     "event_id"),
+                                   sparse = FALSE,
+                                   sci = FALSE)
+## Forcast future values for the validation
+pred <- predict(model, testMatrix)
+
+test$mean_listing_price <- pred
+sales$mean_listing_price[match(test$event_listing_date_id, sales$event_listing_date_id)] <- pred
+
+## Convert whole df back to nonlog
+sales$mean_listing_price <- round(expm1(sales$mean_listing_price))
+write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = T)
+````
