@@ -71,11 +71,75 @@ sales$event_dayDate <- as.numeric(substr(sales$event_date, 9, 10))
 sales$event_year  <- substr(sales$event_date, 1, 4)
 ```
 
-Looking above some of the above clusters under taxonomy, some were NA
-but clearly orchestral.
+Looking at the dataset under taxonomy, some were NA but clearly
+orchestral.
+
+``` r
+sales %>% count(taxonomy)
+```
+
+    ##                taxonomy    n
+    ## 1  Classical Orchestral 4043
+    ## 2 Minor League Baseball 2054
+    ## 3          MLB Baseball 2742
+    ## 4                  <NA>  141
 
 ``` r
 ## fix 
+sales[is.na(sales$taxonomy),] %>% head()
+```
+
+    ##      event_id listing_date event_listing_date_id taxonomy
+    ## 4765  3798567   2017-07-14         3798567_17361     <NA>
+    ## 4776  3798570   2017-07-14         3798570_17361     <NA>
+    ## 4866  3798567   2017-07-15         3798567_17362     <NA>
+    ## 4877  3798570   2017-07-15         3798570_17362     <NA>
+    ## 4966  3798567   2017-07-16         3798567_17363     <NA>
+    ## 4977  3798570   2017-07-16         3798570_17363     <NA>
+    ##                                                               event_title
+    ## 4765           M. Ward with Los Angeles Philharmonic and Rhiannon Giddens
+    ## 4776 Natalia LaFourcade with Gustavo Dudamel and Los Angeles Philharmonic
+    ## 4866           M. Ward with Los Angeles Philharmonic and Rhiannon Giddens
+    ## 4877 Natalia LaFourcade with Gustavo Dudamel and Los Angeles Philharmonic
+    ## 4966           M. Ward with Los Angeles Philharmonic and Rhiannon Giddens
+    ## 4977 Natalia LaFourcade with Gustavo Dudamel and Los Angeles Philharmonic
+    ##           event_datetime tickets_listed mean_listing_price
+    ## 4765 2017-10-25 20:00:00       3.526361           6.195385
+    ## 4776 2017-10-12 20:00:00       3.367296           6.375025
+    ## 4866 2017-10-25 20:00:00       3.526361           6.195385
+    ## 4877 2017-10-12 20:00:00       3.367296           6.375025
+    ## 4966 2017-10-25 20:00:00       3.526361           6.124683
+    ## 4977 2017-10-12 20:00:00       3.367296           6.448715
+    ##                   performer_1              performer_2      performer_3
+    ## 4765                  M. Ward Los Angeles Philharmonic Rhiannon Giddens
+    ## 4776 Los Angeles Philharmonic       Natalia LaFourcade  Gustavo Dudamel
+    ## 4866                  M. Ward Los Angeles Philharmonic Rhiannon Giddens
+    ## 4877 Los Angeles Philharmonic       Natalia LaFourcade  Gustavo Dudamel
+    ## 4966                  M. Ward Los Angeles Philharmonic Rhiannon Giddens
+    ## 4977 Los Angeles Philharmonic       Natalia LaFourcade  Gustavo Dudamel
+    ##      performer_4               venue_name event_date listing_month listing_day
+    ## 4765        <NA> Walt Disney Concert Hall 2017-10-25             7           1
+    ## 4776        <NA> Walt Disney Concert Hall 2017-10-12             7           1
+    ## 4866        <NA> Walt Disney Concert Hall 2017-10-25             7           3
+    ## 4877        <NA> Walt Disney Concert Hall 2017-10-12             7           3
+    ## 4966        <NA> Walt Disney Concert Hall 2017-10-25             7           4
+    ## 4977        <NA> Walt Disney Concert Hall 2017-10-12             7           4
+    ##      listing_dayDate listing_year event_month event_day event_dayDate
+    ## 4765              14         2017          10         7            25
+    ## 4776              14         2017          10         5            12
+    ## 4866              15         2017          10         7            25
+    ## 4877              15         2017          10         5            12
+    ## 4966              16         2017          10         7            25
+    ## 4977              16         2017          10         5            12
+    ##      event_year
+    ## 4765       2017
+    ## 4776       2017
+    ## 4866       2017
+    ## 4877       2017
+    ## 4966       2017
+    ## 4977       2017
+
+``` r
 sales$taxonomy[is.na(sales$taxonomy)] <- "Classical Orchestral"
 ```
 
@@ -176,112 +240,100 @@ trainMatrix <- sparse.model.matrix(~ event_month + event_day + taxonomy + daysSi
 #Create input for xgboost
 trainDMatrix <- xgb.DMatrix(data = trainMatrix, label = label)
 
-params <- list(booster = "gbtree"
-               , objective = "reg:linear"
-               , eta=0.4
-               , gamma=0
+params <- list(booster = "gbtree",
+               objective = "reg:linear",
+               eta=0.4,
+               gamma=0
 )
 
 #Cross-validation
-xgb.tab <- xgb.cv(data = trainDMatrix
-                  , param = params
-                  , maximize = FALSE, evaluation = "rmse", nrounds = 100
-                  , nthreads = 10, nfold = 2, early_stopping_round = 10)
+xgb.tab <- xgb.cv(data = trainDMatrix,
+                  param = params,
+                  maximize = FALSE, 
+                  evaluation = "rmse", 
+                  nrounds = 100, 
+                  nthreads = 10,
+                  nfold = 2,
+                  early_stopping_round = 10)
 ```
 
-    ## [14:41:05] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
-    ## [14:41:05] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
-    ## [1]  train-rmse:3.482167+0.022542    test-rmse:3.481736+0.024671 
+    ## [19:42:45] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
+    ## [19:42:45] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
+    ## [1]  train-rmse:3.482259+0.012886    test-rmse:3.482467+0.012353 
     ## Multiple eval metrics are present. Will use test_rmse for early stopping.
     ## Will train until test_rmse hasn't improved in 10 rounds.
     ## 
-    ## [2]  train-rmse:2.108832+0.012496    test-rmse:2.110081+0.015534 
-    ## [3]  train-rmse:1.286790+0.006301    test-rmse:1.289474+0.009707 
-    ## [4]  train-rmse:0.801454+0.002800    test-rmse:0.808557+0.007113 
-    ## [5]  train-rmse:0.515911+0.003328    test-rmse:0.528556+0.007341 
-    ## [6]  train-rmse:0.352888+0.006605    test-rmse:0.371183+0.004703 
-    ## [7]  train-rmse:0.264923+0.009150    test-rmse:0.291506+0.000292 
-    ## [8]  train-rmse:0.215263+0.010606    test-rmse:0.248196+0.001372 
-    ## [9]  train-rmse:0.191168+0.010083    test-rmse:0.230655+0.004159 
-    ## [10] train-rmse:0.173643+0.006091    test-rmse:0.219146+0.007228 
-    ## [11] train-rmse:0.164449+0.004987    test-rmse:0.213841+0.008702 
-    ## [12] train-rmse:0.154730+0.003769    test-rmse:0.207008+0.008454 
-    ## [13] train-rmse:0.147848+0.004408    test-rmse:0.202094+0.008177 
-    ## [14] train-rmse:0.141699+0.004363    test-rmse:0.199746+0.007504 
-    ## [15] train-rmse:0.136615+0.002490    test-rmse:0.196682+0.008958 
-    ## [16] train-rmse:0.133180+0.004916    test-rmse:0.196101+0.008321 
-    ## [17] train-rmse:0.128267+0.004278    test-rmse:0.194852+0.008185 
-    ## [18] train-rmse:0.122423+0.005911    test-rmse:0.190902+0.007972 
-    ## [19] train-rmse:0.118511+0.007049    test-rmse:0.189261+0.009691 
-    ## [20] train-rmse:0.116378+0.006623    test-rmse:0.188831+0.009703 
-    ## [21] train-rmse:0.112012+0.007326    test-rmse:0.187121+0.009473 
-    ## [22] train-rmse:0.109772+0.008102    test-rmse:0.185941+0.009183 
-    ## [23] train-rmse:0.106422+0.008501    test-rmse:0.184828+0.008841 
-    ## [24] train-rmse:0.104124+0.008790    test-rmse:0.183710+0.009626 
-    ## [25] train-rmse:0.102112+0.007937    test-rmse:0.183708+0.009836 
-    ## [26] train-rmse:0.100560+0.007476    test-rmse:0.182997+0.010198 
-    ## [27] train-rmse:0.096851+0.008734    test-rmse:0.181166+0.010034 
-    ## [28] train-rmse:0.095878+0.009097    test-rmse:0.180773+0.009804 
-    ## [29] train-rmse:0.094223+0.009466    test-rmse:0.180117+0.009924 
-    ## [30] train-rmse:0.092636+0.009433    test-rmse:0.179651+0.009606 
-    ## [31] train-rmse:0.090215+0.007980    test-rmse:0.179150+0.010023 
-    ## [32] train-rmse:0.088051+0.008219    test-rmse:0.178987+0.010269 
-    ## [33] train-rmse:0.087018+0.008206    test-rmse:0.179026+0.010376 
-    ## [34] train-rmse:0.084853+0.007253    test-rmse:0.178869+0.010660 
-    ## [35] train-rmse:0.083583+0.007603    test-rmse:0.178727+0.010715 
-    ## [36] train-rmse:0.082793+0.007468    test-rmse:0.178801+0.010595 
-    ## [37] train-rmse:0.081787+0.007320    test-rmse:0.178205+0.010670 
-    ## [38] train-rmse:0.080604+0.007110    test-rmse:0.177826+0.010766 
-    ## [39] train-rmse:0.079595+0.007048    test-rmse:0.177234+0.011314 
-    ## [40] train-rmse:0.078511+0.007360    test-rmse:0.177251+0.011316 
-    ## [41] train-rmse:0.075997+0.007850    test-rmse:0.176373+0.010599 
-    ## [42] train-rmse:0.073799+0.007517    test-rmse:0.176061+0.010179 
-    ## [43] train-rmse:0.072880+0.007686    test-rmse:0.175529+0.010237 
-    ## [44] train-rmse:0.072113+0.007596    test-rmse:0.175580+0.010238 
-    ## [45] train-rmse:0.070696+0.008413    test-rmse:0.175325+0.009948 
-    ## [46] train-rmse:0.069020+0.007682    test-rmse:0.175201+0.010003 
-    ## [47] train-rmse:0.068626+0.007670    test-rmse:0.175310+0.009984 
-    ## [48] train-rmse:0.067099+0.008463    test-rmse:0.174920+0.009831 
-    ## [49] train-rmse:0.066429+0.008585    test-rmse:0.174791+0.010009 
-    ## [50] train-rmse:0.064611+0.008041    test-rmse:0.174724+0.010095 
-    ## [51] train-rmse:0.063066+0.007421    test-rmse:0.174324+0.010205 
-    ## [52] train-rmse:0.061356+0.007381    test-rmse:0.174163+0.010504 
-    ## [53] train-rmse:0.060059+0.006891    test-rmse:0.173975+0.010598 
-    ## [54] train-rmse:0.059356+0.006831    test-rmse:0.173845+0.010840 
-    ## [55] train-rmse:0.058790+0.006863    test-rmse:0.173965+0.010792 
-    ## [56] train-rmse:0.057876+0.007253    test-rmse:0.173960+0.010838 
-    ## [57] train-rmse:0.057134+0.006956    test-rmse:0.173820+0.011028 
-    ## [58] train-rmse:0.056766+0.006892    test-rmse:0.173697+0.011216 
-    ## [59] train-rmse:0.056189+0.006920    test-rmse:0.173678+0.011192 
-    ## [60] train-rmse:0.055489+0.006567    test-rmse:0.173815+0.011267 
-    ## [61] train-rmse:0.054931+0.006614    test-rmse:0.173805+0.011212 
-    ## [62] train-rmse:0.053814+0.005611    test-rmse:0.173711+0.011321 
-    ## [63] train-rmse:0.052886+0.005338    test-rmse:0.173708+0.011521 
-    ## [64] train-rmse:0.052310+0.005530    test-rmse:0.173677+0.011520 
-    ## [65] train-rmse:0.051766+0.005518    test-rmse:0.173556+0.011607 
-    ## [66] train-rmse:0.051208+0.005431    test-rmse:0.173735+0.011512 
-    ## [67] train-rmse:0.050857+0.005401    test-rmse:0.173540+0.011620 
-    ## [68] train-rmse:0.049587+0.005726    test-rmse:0.173593+0.011927 
-    ## [69] train-rmse:0.048770+0.005244    test-rmse:0.173508+0.011918 
-    ## [70] train-rmse:0.048171+0.005512    test-rmse:0.173604+0.011724 
-    ## [71] train-rmse:0.047379+0.005602    test-rmse:0.173460+0.011605 
-    ## [72] train-rmse:0.046691+0.005547    test-rmse:0.173285+0.011598 
-    ## [73] train-rmse:0.045595+0.005979    test-rmse:0.173239+0.011502 
-    ## [74] train-rmse:0.044418+0.005058    test-rmse:0.172983+0.011590 
-    ## [75] train-rmse:0.043705+0.005375    test-rmse:0.172963+0.011613 
-    ## [76] train-rmse:0.043353+0.005315    test-rmse:0.172917+0.011618 
-    ## [77] train-rmse:0.043093+0.005396    test-rmse:0.172999+0.011593 
-    ## [78] train-rmse:0.042757+0.005308    test-rmse:0.173077+0.011604 
-    ## [79] train-rmse:0.041654+0.005002    test-rmse:0.173181+0.011662 
-    ## [80] train-rmse:0.041356+0.005114    test-rmse:0.173204+0.011607 
-    ## [81] train-rmse:0.040433+0.004577    test-rmse:0.173081+0.011756 
-    ## [82] train-rmse:0.040026+0.004347    test-rmse:0.173110+0.011730 
-    ## [83] train-rmse:0.039670+0.004352    test-rmse:0.173111+0.011765 
-    ## [84] train-rmse:0.039324+0.004105    test-rmse:0.173148+0.011736 
-    ## [85] train-rmse:0.038866+0.004096    test-rmse:0.173141+0.011607 
-    ## [86] train-rmse:0.038581+0.004238    test-rmse:0.173118+0.011621 
+    ## [2]  train-rmse:2.108574+0.007311    test-rmse:2.109422+0.005445 
+    ## [3]  train-rmse:1.287266+0.002220    test-rmse:1.289585+0.002950 
+    ## [4]  train-rmse:0.801846+0.000150    test-rmse:0.805654+0.000298 
+    ## [5]  train-rmse:0.514771+0.002344    test-rmse:0.525097+0.004430 
+    ## [6]  train-rmse:0.351867+0.002113    test-rmse:0.368741+0.005668 
+    ## [7]  train-rmse:0.265928+0.000670    test-rmse:0.289721+0.006018 
+    ## [8]  train-rmse:0.218693+0.002744    test-rmse:0.247668+0.001968 
+    ## [9]  train-rmse:0.188965+0.001098    test-rmse:0.224829+0.000666 
+    ## [10] train-rmse:0.174465+0.001726    test-rmse:0.214053+0.000321 
+    ## [11] train-rmse:0.163200+0.004031    test-rmse:0.208116+0.000963 
+    ## [12] train-rmse:0.150417+0.002806    test-rmse:0.200638+0.001220 
+    ## [13] train-rmse:0.143620+0.003423    test-rmse:0.197991+0.001494 
+    ## [14] train-rmse:0.136481+0.000729    test-rmse:0.194973+0.000964 
+    ## [15] train-rmse:0.130717+0.000757    test-rmse:0.192887+0.000722 
+    ## [16] train-rmse:0.126119+0.001356    test-rmse:0.191441+0.001273 
+    ## [17] train-rmse:0.122621+0.000384    test-rmse:0.189726+0.000417 
+    ## [18] train-rmse:0.118892+0.001659    test-rmse:0.187715+0.000415 
+    ## [19] train-rmse:0.114326+0.000652    test-rmse:0.186794+0.000575 
+    ## [20] train-rmse:0.110759+0.000749    test-rmse:0.186064+0.001726 
+    ## [21] train-rmse:0.108773+0.000676    test-rmse:0.185967+0.002017 
+    ## [22] train-rmse:0.105037+0.000157    test-rmse:0.183877+0.001901 
+    ## [23] train-rmse:0.103357+0.000341    test-rmse:0.183658+0.001991 
+    ## [24] train-rmse:0.100805+0.001172    test-rmse:0.183300+0.002111 
+    ## [25] train-rmse:0.099099+0.001909    test-rmse:0.182466+0.001534 
+    ## [26] train-rmse:0.097594+0.002665    test-rmse:0.182824+0.001905 
+    ## [27] train-rmse:0.095692+0.003221    test-rmse:0.182322+0.002365 
+    ## [28] train-rmse:0.093179+0.003490    test-rmse:0.181781+0.001842 
+    ## [29] train-rmse:0.091085+0.003577    test-rmse:0.180688+0.001603 
+    ## [30] train-rmse:0.089945+0.004272    test-rmse:0.180440+0.001011 
+    ## [31] train-rmse:0.086623+0.002000    test-rmse:0.179069+0.001760 
+    ## [32] train-rmse:0.085208+0.002220    test-rmse:0.178914+0.001991 
+    ## [33] train-rmse:0.084412+0.002251    test-rmse:0.178690+0.001809 
+    ## [34] train-rmse:0.082145+0.003250    test-rmse:0.178026+0.000934 
+    ## [35] train-rmse:0.081593+0.003363    test-rmse:0.177919+0.000844 
+    ## [36] train-rmse:0.077944+0.003365    test-rmse:0.177186+0.000403 
+    ## [37] train-rmse:0.076837+0.003680    test-rmse:0.176580+0.000060 
+    ## [38] train-rmse:0.075342+0.002651    test-rmse:0.176252+0.000343 
+    ## [39] train-rmse:0.074206+0.002545    test-rmse:0.176320+0.000034 
+    ## [40] train-rmse:0.072344+0.002862    test-rmse:0.176102+0.000192 
+    ## [41] train-rmse:0.071114+0.003200    test-rmse:0.175797+0.000174 
+    ## [42] train-rmse:0.070276+0.003934    test-rmse:0.175708+0.000214 
+    ## [43] train-rmse:0.069469+0.004169    test-rmse:0.175627+0.000238 
+    ## [44] train-rmse:0.067644+0.002716    test-rmse:0.175755+0.000448 
+    ## [45] train-rmse:0.066562+0.002271    test-rmse:0.175966+0.000316 
+    ## [46] train-rmse:0.065225+0.001989    test-rmse:0.176171+0.000227 
+    ## [47] train-rmse:0.063868+0.002980    test-rmse:0.175743+0.000119 
+    ## [48] train-rmse:0.062100+0.002585    test-rmse:0.175830+0.000286 
+    ## [49] train-rmse:0.061417+0.002819    test-rmse:0.176142+0.000594 
+    ## [50] train-rmse:0.060279+0.003521    test-rmse:0.175909+0.000367 
+    ## [51] train-rmse:0.059067+0.002705    test-rmse:0.175959+0.000646 
+    ## [52] train-rmse:0.058361+0.002883    test-rmse:0.175980+0.000726 
+    ## [53] train-rmse:0.057450+0.003179    test-rmse:0.175616+0.000348 
+    ## [54] train-rmse:0.056703+0.003067    test-rmse:0.175457+0.000312 
+    ## [55] train-rmse:0.055084+0.001907    test-rmse:0.175152+0.000507 
+    ## [56] train-rmse:0.054103+0.001803    test-rmse:0.174959+0.000491 
+    ## [57] train-rmse:0.053231+0.001837    test-rmse:0.174984+0.000715 
+    ## [58] train-rmse:0.052491+0.002171    test-rmse:0.174873+0.000634 
+    ## [59] train-rmse:0.051854+0.001941    test-rmse:0.174793+0.000480 
+    ## [60] train-rmse:0.051175+0.002020    test-rmse:0.174788+0.000550 
+    ## [61] train-rmse:0.050019+0.001700    test-rmse:0.174868+0.000617 
+    ## [62] train-rmse:0.048742+0.001887    test-rmse:0.174877+0.000673 
+    ## [63] train-rmse:0.047925+0.001691    test-rmse:0.174830+0.000558 
+    ## [64] train-rmse:0.047382+0.001833    test-rmse:0.175034+0.000533 
+    ## [65] train-rmse:0.046377+0.001517    test-rmse:0.174844+0.000495 
+    ## [66] train-rmse:0.045852+0.001455    test-rmse:0.174945+0.000441 
+    ## [67] train-rmse:0.045408+0.001534    test-rmse:0.174978+0.000335 
+    ## [68] train-rmse:0.045164+0.001519    test-rmse:0.175054+0.000401 
+    ## [69] train-rmse:0.044824+0.001577    test-rmse:0.175042+0.000324 
+    ## [70] train-rmse:0.044510+0.001849    test-rmse:0.175084+0.000286 
     ## Stopping. Best iteration:
-    ## [76] train-rmse:0.043353+0.005315    test-rmse:0.172917+0.011618
+    ## [60] train-rmse:0.051175+0.002020    test-rmse:0.174788+0.000550
 
 ``` r
 #Number of rounds choosen above
@@ -289,13 +341,15 @@ num_iterations = xgb.tab$best_iteration
 
 
 ## Create model
-model <- xgb.train(data = trainDMatrix
-                   , param = params
-                   , maximize = FALSE, evaluation = 'rmse', nrounds = num_iterations)
+model <- xgb.train(data = trainDMatrix,
+                   param = params,
+                   evaluation = 'rmse',
+                   maximize = FALSE,
+                   nrounds = num_iterations)
 ```
 
-    ## [14:41:05] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
-    ## [14:41:05] WARNING: amalgamation/../src/learner.cc:573: 
+    ## [19:42:45] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
+    ## [19:42:45] WARNING: amalgamation/../src/learner.cc:573: 
     ## Parameters: { "evaluation" } might not be used.
     ## 
     ##   This may not be accurate due to some parameters are only used in language bindings but
@@ -346,13 +400,13 @@ ggplot(ML, aes(x=tickets_listed, y = tickets_listed_pred, color = taxonomy))+
 rmse(ML$tickets_listed, ML$tickets_listed_pred)
 ```
 
-    ## [1] 0.388088
+    ## [1] 0.3805528
 
 ``` r
 R2_Score(ML$tickets_listed, ML$tickets_listed_pred)
 ```
 
-    ## [1] 0.9762273
+    ## [1] 0.9770685
 
 ``` r
 ## Convert back to readable form
@@ -365,24 +419,24 @@ head(ML, 20)
     ## # Groups:   event_id [20]
     ##    event_id tickets_listed tickets_listed_pred taxonomy            
     ##       <int>          <dbl>               <dbl> <chr>               
-    ##  1  3594065           6029                6235 MLB Baseball        
-    ##  2  3594070           8666                9501 MLB Baseball        
-    ##  3  3594068           9102                9729 MLB Baseball        
-    ##  4  3594103           4910                5975 MLB Baseball        
-    ##  5  3594105           3334                4330 MLB Baseball        
-    ##  6  3594101           6670                7206 MLB Baseball        
-    ##  7  3594108           2234                3855 MLB Baseball        
-    ##  8  3798568             24                  27 Classical Orchestral
+    ##  1  3594065           6029                6143 MLB Baseball        
+    ##  2  3594070           8666                9509 MLB Baseball        
+    ##  3  3594068           9102                9614 MLB Baseball        
+    ##  4  3594103           4910                5902 MLB Baseball        
+    ##  5  3594105           3334                4278 MLB Baseball        
+    ##  6  3594101           6670                7050 MLB Baseball        
+    ##  7  3594108           2234                3848 MLB Baseball        
+    ##  8  3798568             24                  28 Classical Orchestral
     ##  9  3594080           8947                9424 MLB Baseball        
-    ## 10  3594078           8599                8796 MLB Baseball        
-    ## 11  3594063           8876                9080 MLB Baseball        
-    ## 12  3594059           8190                8440 MLB Baseball        
-    ## 13  3594057           8504                8638 MLB Baseball        
-    ## 14  3594061           5662                5804 MLB Baseball        
+    ## 10  3594078           8599                8592 MLB Baseball        
+    ## 11  3594063           8876                9167 MLB Baseball        
+    ## 12  3594059           8190                8459 MLB Baseball        
+    ## 13  3594057           8504                8668 MLB Baseball        
+    ## 14  3594061           5662                5817 MLB Baseball        
     ## 15  3931481              7                   6 Classical Orchestral
-    ## 16  3799893             39                  39 Classical Orchestral
+    ## 16  3799893             39                  38 Classical Orchestral
     ## 17  3799894             33                  33 Classical Orchestral
-    ## 18  3799887             39                  39 Classical Orchestral
+    ## 18  3799887             39                  38 Classical Orchestral
     ## 19  3799899             39                  37 Classical Orchestral
     ## 20  3799888             19                  26 Classical Orchestral
 
@@ -407,7 +461,11 @@ test$tickets_listed <- pred
 sales$tickets_listed[match(test$event_listing_date_id, sales$event_listing_date_id)] <- pred
 sales$tickets_listed <- round(expm1(sales$tickets_listed))
 
-write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = T)
+write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", 
+            sep = "\t",
+            quote = F, 
+            col.names = T, 
+            row.names = T)
 ```
 
 # Mean Listing Price
@@ -517,90 +575,69 @@ xgb.tab <- xgb.cv(data = trainDMatrix
                   , nthreads = 10, nfold = 2, early_stopping_round = 10)
 ```
 
-    ## [14:41:09] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
-    ## [14:41:09] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
-    ## [1]  train-rmse:2.592398+0.011722    test-rmse:2.592592+0.013327 
+    ## [19:42:48] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
+    ## [19:42:48] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
+    ## [1]  train-rmse:2.592301+0.013582    test-rmse:2.593138+0.021322 
     ## Multiple eval metrics are present. Will use test_rmse for early stopping.
     ## Will train until test_rmse hasn't improved in 10 rounds.
     ## 
-    ## [2]  train-rmse:1.576178+0.006286    test-rmse:1.576250+0.008306 
-    ## [3]  train-rmse:0.971101+0.003620    test-rmse:0.972979+0.005298 
-    ## [4]  train-rmse:0.616388+0.001889    test-rmse:0.618805+0.003665 
-    ## [5]  train-rmse:0.414348+0.001317    test-rmse:0.417215+0.000443 
-    ## [6]  train-rmse:0.303681+0.000179    test-rmse:0.309074+0.000316 
-    ## [7]  train-rmse:0.248582+0.001316    test-rmse:0.255853+0.000150 
-    ## [8]  train-rmse:0.222403+0.001144    test-rmse:0.231695+0.003154 
-    ## [9]  train-rmse:0.210603+0.001312    test-rmse:0.220631+0.004024 
-    ## [10] train-rmse:0.204818+0.000488    test-rmse:0.215663+0.004646 
-    ## [11] train-rmse:0.200059+0.001278    test-rmse:0.212140+0.005029 
-    ## [12] train-rmse:0.198014+0.000272    test-rmse:0.210371+0.004322 
-    ## [13] train-rmse:0.196175+0.000535    test-rmse:0.208979+0.003614 
-    ## [14] train-rmse:0.195566+0.000706    test-rmse:0.208752+0.003537 
-    ## [15] train-rmse:0.194774+0.000437    test-rmse:0.207700+0.003152 
-    ## [16] train-rmse:0.194363+0.000487    test-rmse:0.207312+0.003261 
-    ## [17] train-rmse:0.193872+0.000243    test-rmse:0.206987+0.003228 
-    ## [18] train-rmse:0.193475+0.000095    test-rmse:0.206270+0.002826 
-    ## [19] train-rmse:0.193225+0.000052    test-rmse:0.206149+0.002752 
-    ## [20] train-rmse:0.193080+0.000055    test-rmse:0.206016+0.002647 
-    ## [21] train-rmse:0.192822+0.000051    test-rmse:0.206029+0.002797 
-    ## [22] train-rmse:0.192666+0.000071    test-rmse:0.205938+0.002516 
-    ## [23] train-rmse:0.192596+0.000050    test-rmse:0.205769+0.002425 
-    ## [24] train-rmse:0.192512+0.000114    test-rmse:0.205747+0.002243 
-    ## [25] train-rmse:0.192472+0.000117    test-rmse:0.205726+0.002268 
-    ## [26] train-rmse:0.192427+0.000092    test-rmse:0.205723+0.002323 
-    ## [27] train-rmse:0.192383+0.000082    test-rmse:0.205705+0.002307 
-    ## [28] train-rmse:0.192320+0.000087    test-rmse:0.205607+0.002208 
-    ## [29] train-rmse:0.192238+0.000083    test-rmse:0.205383+0.002051 
-    ## [30] train-rmse:0.192220+0.000093    test-rmse:0.205315+0.001998 
-    ## [31] train-rmse:0.192188+0.000071    test-rmse:0.205301+0.001947 
-    ## [32] train-rmse:0.192174+0.000078    test-rmse:0.205317+0.001952 
-    ## [33] train-rmse:0.192130+0.000061    test-rmse:0.205251+0.001893 
-    ## [34] train-rmse:0.192106+0.000052    test-rmse:0.205168+0.001819 
-    ## [35] train-rmse:0.192094+0.000053    test-rmse:0.205142+0.001783 
-    ## [36] train-rmse:0.192089+0.000055    test-rmse:0.205153+0.001799 
-    ## [37] train-rmse:0.192078+0.000046    test-rmse:0.205166+0.001806 
-    ## [38] train-rmse:0.192069+0.000042    test-rmse:0.205181+0.001791 
-    ## [39] train-rmse:0.192063+0.000043    test-rmse:0.205184+0.001783 
-    ## [40] train-rmse:0.192057+0.000044    test-rmse:0.205118+0.001721 
-    ## [41] train-rmse:0.192043+0.000042    test-rmse:0.205124+0.001695 
-    ## [42] train-rmse:0.192037+0.000041    test-rmse:0.205112+0.001683 
-    ## [43] train-rmse:0.192033+0.000037    test-rmse:0.205124+0.001679 
-    ## [44] train-rmse:0.192026+0.000040    test-rmse:0.205055+0.001607 
-    ## [45] train-rmse:0.192020+0.000041    test-rmse:0.205012+0.001569 
-    ## [46] train-rmse:0.192018+0.000042    test-rmse:0.205008+0.001566 
-    ## [47] train-rmse:0.192013+0.000042    test-rmse:0.205012+0.001561 
-    ## [48] train-rmse:0.192011+0.000041    test-rmse:0.205003+0.001547 
-    ## [49] train-rmse:0.192010+0.000041    test-rmse:0.205007+0.001550 
-    ## [50] train-rmse:0.192006+0.000042    test-rmse:0.204967+0.001500 
-    ## [51] train-rmse:0.192002+0.000043    test-rmse:0.204970+0.001500 
-    ## [52] train-rmse:0.192001+0.000043    test-rmse:0.204954+0.001493 
-    ## [53] train-rmse:0.191999+0.000043    test-rmse:0.204948+0.001487 
-    ## [54] train-rmse:0.191997+0.000044    test-rmse:0.204935+0.001475 
-    ## [55] train-rmse:0.191997+0.000043    test-rmse:0.204937+0.001475 
-    ## [56] train-rmse:0.191996+0.000043    test-rmse:0.204934+0.001480 
-    ## [57] train-rmse:0.191995+0.000042    test-rmse:0.204939+0.001479 
-    ## [58] train-rmse:0.191994+0.000042    test-rmse:0.204942+0.001482 
-    ## [59] train-rmse:0.191993+0.000043    test-rmse:0.204925+0.001468 
-    ## [60] train-rmse:0.191992+0.000042    test-rmse:0.204925+0.001458 
-    ## [61] train-rmse:0.191992+0.000042    test-rmse:0.204922+0.001453 
-    ## [62] train-rmse:0.191992+0.000041    test-rmse:0.204923+0.001453 
-    ## [63] train-rmse:0.191991+0.000042    test-rmse:0.204924+0.001454 
-    ## [64] train-rmse:0.191991+0.000042    test-rmse:0.204905+0.001435 
-    ## [65] train-rmse:0.191990+0.000042    test-rmse:0.204906+0.001437 
-    ## [66] train-rmse:0.191990+0.000042    test-rmse:0.204906+0.001431 
-    ## [67] train-rmse:0.191990+0.000042    test-rmse:0.204902+0.001427 
-    ## [68] train-rmse:0.191990+0.000042    test-rmse:0.204907+0.001426 
-    ## [69] train-rmse:0.191990+0.000042    test-rmse:0.204907+0.001426 
-    ## [70] train-rmse:0.191990+0.000042    test-rmse:0.204908+0.001426 
-    ## [71] train-rmse:0.191990+0.000042    test-rmse:0.204909+0.001425 
-    ## [72] train-rmse:0.191989+0.000041    test-rmse:0.204908+0.001426 
-    ## [73] train-rmse:0.191989+0.000041    test-rmse:0.204908+0.001426 
-    ## [74] train-rmse:0.191989+0.000041    test-rmse:0.204908+0.001426 
-    ## [75] train-rmse:0.191989+0.000041    test-rmse:0.204908+0.001426 
-    ## [76] train-rmse:0.191989+0.000041    test-rmse:0.204908+0.001426 
-    ## [77] train-rmse:0.191989+0.000041    test-rmse:0.204908+0.001426 
+    ## [2]  train-rmse:1.575830+0.007676    test-rmse:1.577245+0.021327 
+    ## [3]  train-rmse:0.970049+0.004119    test-rmse:0.972457+0.020238 
+    ## [4]  train-rmse:0.615803+0.001727    test-rmse:0.619261+0.017288 
+    ## [5]  train-rmse:0.413277+0.001434    test-rmse:0.419882+0.015373 
+    ## [6]  train-rmse:0.303898+0.003684    test-rmse:0.312285+0.010767 
+    ## [7]  train-rmse:0.249196+0.004580    test-rmse:0.261254+0.007910 
+    ## [8]  train-rmse:0.225507+0.004830    test-rmse:0.239279+0.004612 
+    ## [9]  train-rmse:0.212632+0.003541    test-rmse:0.227686+0.002245 
+    ## [10] train-rmse:0.204637+0.004078    test-rmse:0.219948+0.002211 
+    ## [11] train-rmse:0.201182+0.005420    test-rmse:0.216241+0.002987 
+    ## [12] train-rmse:0.199108+0.005236    test-rmse:0.214013+0.002551 
+    ## [13] train-rmse:0.197325+0.004457    test-rmse:0.212725+0.001671 
+    ## [14] train-rmse:0.196706+0.004771    test-rmse:0.212019+0.002092 
+    ## [15] train-rmse:0.195816+0.004179    test-rmse:0.211890+0.002157 
+    ## [16] train-rmse:0.195435+0.004124    test-rmse:0.211501+0.002155 
+    ## [17] train-rmse:0.195034+0.003883    test-rmse:0.211271+0.001948 
+    ## [18] train-rmse:0.194588+0.003750    test-rmse:0.210934+0.001942 
+    ## [19] train-rmse:0.194482+0.003797    test-rmse:0.210879+0.001903 
+    ## [20] train-rmse:0.194007+0.003631    test-rmse:0.211048+0.002572 
+    ## [21] train-rmse:0.193853+0.003557    test-rmse:0.210975+0.002505 
+    ## [22] train-rmse:0.193735+0.003633    test-rmse:0.210792+0.002654 
+    ## [23] train-rmse:0.193640+0.003646    test-rmse:0.210691+0.002759 
+    ## [24] train-rmse:0.193555+0.003615    test-rmse:0.210693+0.002773 
+    ## [25] train-rmse:0.193392+0.003615    test-rmse:0.210693+0.003166 
+    ## [26] train-rmse:0.193308+0.003584    test-rmse:0.210689+0.003275 
+    ## [27] train-rmse:0.193259+0.003599    test-rmse:0.210620+0.003306 
+    ## [28] train-rmse:0.193137+0.003548    test-rmse:0.210577+0.003495 
+    ## [29] train-rmse:0.193070+0.003502    test-rmse:0.210684+0.003624 
+    ## [30] train-rmse:0.193014+0.003536    test-rmse:0.210543+0.003796 
+    ## [31] train-rmse:0.192985+0.003521    test-rmse:0.210530+0.003841 
+    ## [32] train-rmse:0.192964+0.003526    test-rmse:0.210496+0.003889 
+    ## [33] train-rmse:0.192927+0.003502    test-rmse:0.210378+0.003864 
+    ## [34] train-rmse:0.192919+0.003506    test-rmse:0.210383+0.003849 
+    ## [35] train-rmse:0.192898+0.003493    test-rmse:0.210375+0.003837 
+    ## [36] train-rmse:0.192879+0.003480    test-rmse:0.210416+0.003880 
+    ## [37] train-rmse:0.192860+0.003480    test-rmse:0.210395+0.003930 
+    ## [38] train-rmse:0.192857+0.003482    test-rmse:0.210373+0.003957 
+    ## [39] train-rmse:0.192854+0.003480    test-rmse:0.210380+0.003958 
+    ## [40] train-rmse:0.192850+0.003483    test-rmse:0.210368+0.003961 
+    ## [41] train-rmse:0.192843+0.003485    test-rmse:0.210373+0.003978 
+    ## [42] train-rmse:0.192836+0.003489    test-rmse:0.210347+0.004010 
+    ## [43] train-rmse:0.192826+0.003480    test-rmse:0.210369+0.004037 
+    ## [44] train-rmse:0.192820+0.003477    test-rmse:0.210343+0.004008 
+    ## [45] train-rmse:0.192819+0.003476    test-rmse:0.210345+0.004022 
+    ## [46] train-rmse:0.192816+0.003478    test-rmse:0.210332+0.004037 
+    ## [47] train-rmse:0.192815+0.003478    test-rmse:0.210335+0.004038 
+    ## [48] train-rmse:0.192813+0.003477    test-rmse:0.210348+0.004059 
+    ## [49] train-rmse:0.192807+0.003474    test-rmse:0.210357+0.004082 
+    ## [50] train-rmse:0.192806+0.003473    test-rmse:0.210336+0.004060 
+    ## [51] train-rmse:0.192805+0.003473    test-rmse:0.210333+0.004065 
+    ## [52] train-rmse:0.192802+0.003473    test-rmse:0.210402+0.004139 
+    ## [53] train-rmse:0.192802+0.003473    test-rmse:0.210403+0.004139 
+    ## [54] train-rmse:0.192802+0.003472    test-rmse:0.210403+0.004145 
+    ## [55] train-rmse:0.192800+0.003473    test-rmse:0.210455+0.004205 
+    ## [56] train-rmse:0.192800+0.003472    test-rmse:0.210456+0.004203 
     ## Stopping. Best iteration:
-    ## [67] train-rmse:0.191990+0.000042    test-rmse:0.204902+0.001427
+    ## [46] train-rmse:0.192816+0.003478    test-rmse:0.210332+0.004037
 
 ``` r
 #Number of rounds choosen above
@@ -613,8 +650,8 @@ model <- xgb.train(data = trainDMatrix
                    , maximize = FALSE, evaluation = 'rmse', nrounds = num_iterations)
 ```
 
-    ## [14:41:10] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
-    ## [14:41:10] WARNING: amalgamation/../src/learner.cc:573: 
+    ## [19:42:49] WARNING: amalgamation/../src/objective/regression_obj.cu:171: reg:linear is now deprecated in favor of reg:squarederror.
+    ## [19:42:49] WARNING: amalgamation/../src/learner.cc:573: 
     ## Parameters: { "evaluation" } might not be used.
     ## 
     ##   This may not be accurate due to some parameters are only used in language bindings but
@@ -664,13 +701,13 @@ ggplot(ML, aes(x=mean_listing_price, y = mean_listing_price_pred, color = taxono
 rmse(ML$mean_listing_price, ML$mean_listing_price_pred)
 ```
 
-    ## [1] 0.1858257
+    ## [1] 0.1857735
 
 ``` r
 R2_Score(ML$mean_listing_price, ML$mean_listing_price_pred)
 ```
 
-    ## [1] 0.9776531
+    ## [1] 0.9776671
 
 ``` r
 ## Convert back to readable form
@@ -690,19 +727,19 @@ head(ML, 20)
     ##  5  3594105                 54                      45 MLB Baseball        
     ##  6  3594101                 26                      37 MLB Baseball        
     ##  7  3594108                 28                      29 MLB Baseball        
-    ##  8  3798568                452                     467 Classical Orchestral
+    ##  8  3798568                452                     465 Classical Orchestral
     ##  9  3594080                 50                      50 MLB Baseball        
     ## 10  3594078                 43                      40 MLB Baseball        
     ## 11  3594063                 32                      33 MLB Baseball        
     ## 12  3594059                 48                      53 MLB Baseball        
     ## 13  3594057                 39                      44 MLB Baseball        
     ## 14  3594061                 99                      73 MLB Baseball        
-    ## 15  3931481                348                     373 Classical Orchestral
+    ## 15  3931481                348                     374 Classical Orchestral
     ## 16  3799893                598                     611 Classical Orchestral
-    ## 17  3799894                600                     630 Classical Orchestral
-    ## 18  3799887                598                     610 Classical Orchestral
+    ## 17  3799894                600                     629 Classical Orchestral
+    ## 18  3799887                598                     608 Classical Orchestral
     ## 19  3799899                598                     596 Classical Orchestral
-    ## 20  3799888                352                     376 Classical Orchestral
+    ## 20  3799888                352                     382 Classical Orchestral
 
 ## Predict the testing data for assessment
 
@@ -725,5 +762,5 @@ sales$mean_listing_price[match(test$event_listing_date_id, sales$event_listing_d
 
 ## Convert whole df back to nonlog
 sales$mean_listing_price <- round(expm1(sales$mean_listing_price))
-write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = T)
+write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = F)
 ```

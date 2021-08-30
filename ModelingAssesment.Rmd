@@ -70,10 +70,12 @@ sales$event_dayDate <- as.numeric(substr(sales$event_date, 9, 10))
 sales$event_year  <- substr(sales$event_date, 1, 4)
 ```
 
-Looking above some of the above clusters under taxonomy, some were NA but clearly orchestral.
+Looking at the dataset under taxonomy, some were NA but clearly orchestral.
 
 ``` {r fixtaxonomy}
+sales %>% count(taxonomy)
 ## fix 
+sales[is.na(sales$taxonomy),] %>%s head()
 sales$taxonomy[is.na(sales$taxonomy)] <- "Classical Orchestral"
 ```
 
@@ -148,26 +150,32 @@ trainMatrix <- sparse.model.matrix(~ event_month + event_day + taxonomy + daysSi
 #Create input for xgboost
 trainDMatrix <- xgb.DMatrix(data = trainMatrix, label = label)
 
-params <- list(booster = "gbtree"
-               , objective = "reg:linear"
-               , eta=0.4
-               , gamma=0
+params <- list(booster = "gbtree",
+               objective = "reg:linear",
+               eta=0.4,
+               gamma=0
 )
 
 #Cross-validation
-xgb.tab <- xgb.cv(data = trainDMatrix
-                  , param = params
-                  , maximize = FALSE, evaluation = "rmse", nrounds = 100
-                  , nthreads = 10, nfold = 2, early_stopping_round = 10)
+xgb.tab <- xgb.cv(data = trainDMatrix,
+                  param = params,
+                  maximize = FALSE, 
+                  evaluation = "rmse", 
+                  nrounds = 100, 
+                  nthreads = 10,
+                  nfold = 2,
+                  early_stopping_round = 10)
 
 #Number of rounds choosen above
 num_iterations = xgb.tab$best_iteration
 
 
 ## Create model
-model <- xgb.train(data = trainDMatrix
-                   , param = params
-                   , maximize = FALSE, evaluation = 'rmse', nrounds = num_iterations)
+model <- xgb.train(data = trainDMatrix,
+                   param = params,
+                   evaluation = 'rmse',
+                   maximize = FALSE,
+                   nrounds = num_iterations)
 
 ## Plot feature Importance
 importance <- xgb.importance(feature_names = colnames(trainMatrix), model = model)
@@ -232,7 +240,11 @@ test$tickets_listed <- pred
 sales$tickets_listed[match(test$event_listing_date_id, sales$event_listing_date_id)] <- pred
 sales$tickets_listed <- round(expm1(sales$tickets_listed))
 
-write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = T)
+write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", 
+            sep = "\t",
+            quote = F, 
+            col.names = T, 
+            row.names = T)
 ````
 
 
@@ -398,5 +410,5 @@ sales$mean_listing_price[match(test$event_listing_date_id, sales$event_listing_d
 
 ## Convert whole df back to nonlog
 sales$mean_listing_price <- round(expm1(sales$mean_listing_price))
-write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = T)
+write.table(sales, "~/Documents/asses/AssessmentOutput.tsv", sep = "\t", quote = F, col.names = T, row.names = F)
 ````
